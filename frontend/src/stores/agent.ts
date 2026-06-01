@@ -99,17 +99,23 @@ export const useAgentStore = create<AgentState>((set) => ({
 
   switchSession: (sid, msgs) => {
     _id = 0;
-    set((s) => ({
-      sessionId: sid,
-      messages: msgs || [],
-      status: "idle",
-      streamingText: "",
-      toolCalls: [],
-      sessionLoading: !msgs,
-      // Preserve streamingSessionId so the sidebar spinner stays visible
-      // when switching away from a running session.
-      streamingSessionId: s.streamingSessionId,
-    }));
+    set((s) => {
+      // If switching to the session that is still streaming on the backend,
+      // keep status as "streaming" so the UI shows a working indicator
+      // immediately instead of briefly flashing idle until SSE replay restores it.
+      // SSE replay may miss key events (attempt.created/tool_call) for long
+      // runs because the EventBus buffer caps at 500 events.
+      const isResumingStreaming = s.streamingSessionId === sid;
+      return {
+        sessionId: sid,
+        messages: msgs || [],
+        status: isResumingStreaming ? "streaming" : "idle",
+        streamingText: "",
+        toolCalls: [],
+        sessionLoading: !msgs,
+        streamingSessionId: s.streamingSessionId,
+      };
+    });
   },
 
   setSessionLoading: (sessionLoading) => set({ sessionLoading }),

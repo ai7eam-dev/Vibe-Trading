@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from src.agent.progress import emit_progress
 from src.agent.tools import BaseTool
 
 logger = logging.getLogger(__name__)
@@ -675,6 +676,29 @@ class SwarmTool(BaseTool):
                 )
 
             reconciled = store.reconcile_run(loaded, write=True)
+
+            # Emit swarm-internal progress so the frontend shows which
+            # tasks are running instead of a generic "Step 1 · run_swarm".
+            total = len(reconciled.tasks)
+            completed = sum(1 for t in reconciled.tasks if t.status.value == "completed")
+            running_tasks = [t for t in reconciled.tasks if t.status.value == "in_progress"]
+            if running_tasks:
+                agents = ", ".join(t.agent_id or "?" for t in running_tasks)
+                stage = agents
+                message = f"{completed}/{total} tasks completed"
+            elif completed < total:
+                stage = "Preparing"
+                message = f"{completed}/{total} tasks completed"
+            else:
+                stage = ""
+                message = ""
+            emit_progress(
+                stage=stage,
+                current=completed,
+                total=total,
+                message=message,
+            )
+
             if reconciled.status.value in ("completed", "failed", "cancelled"):
                 return _format_result(reconciled, preset, variables)
 

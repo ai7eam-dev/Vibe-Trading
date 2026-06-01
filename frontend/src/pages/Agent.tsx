@@ -425,15 +425,37 @@ export function Agent() {
         if (act().status !== "streaming") act().setStatus("streaming");
         const toolName = String(d.tool || "");
         if (!toolName) return;
-        act().updateToolCall(toolName, {
+        // After session switch, toolCalls may be empty because the replay buffer
+        // (500 events) dropped the original tool_call event. Recreate the entry
+        // so the ToolProgressIndicator reappears on the next heartbeat.
+        const s = act();
+        if (!s.toolCalls.some(tc => tc.id === toolName)) {
+          s.addToolCall({
+            id: toolName, tool: toolName,
+            arguments: {},
+            status: "running", timestamp: Date.now(),
+          });
+        }
+        s.updateToolCall(toolName, {
           elapsed_s: Number(d.elapsed_s || 0),
         });
       },
 
       tool_progress: (d) => {
         touch();
+        if (act().status !== "streaming") act().setStatus("streaming");
         const toolName = String(d.tool || "");
         if (!toolName) return;
+        // Same recovery as tool_heartbeat: recreate missing tool call entry
+        // after session switch when the replay buffer dropped the original.
+        const s = act();
+        if (!s.toolCalls.some(tc => tc.id === toolName)) {
+          s.addToolCall({
+            id: toolName, tool: toolName,
+            arguments: {},
+            status: "running", timestamp: Date.now(),
+          });
+        }
         const payload: NonNullable<ToolCallEntry["progress"]> = {};
         if (typeof d.stage === "string" && d.stage) payload.stage = d.stage;
         if (typeof d.message === "string" && d.message) payload.message = d.message;
